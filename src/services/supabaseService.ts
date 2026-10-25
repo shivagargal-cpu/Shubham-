@@ -19,9 +19,9 @@ export const supabaseService = {
   // ==========================================
   // RESTAURANT SETTINGS & HOMEPAGE CONTENT
   // ==========================================
-  async getSettings(): Promise<RestaurantSettings> {
+  async getSettings(): Promise<RestaurantSettings | null> {
     if (!isSupabaseLive() || !supabase) {
-      return storage.getSettings();
+      return null;
     }
 
     try {
@@ -32,7 +32,7 @@ export const supabaseService = {
         .maybeSingle();
 
       if (error || !data) {
-        return storage.getSettings();
+        return null;
       }
 
       const restName = data.restaurant_name || 'BROSO';
@@ -85,12 +85,12 @@ export const supabaseService = {
         updatedAt: data.updated_at || new Date().toISOString(),
       };
     } catch {
-      return storage.getSettings();
+      return null;
     }
   },
 
   async updateSettings(settings: Partial<RestaurantSettings>): Promise<RestaurantSettings> {
-    const current = await this.getSettings();
+    const current = (await this.getSettings()) || storage.getSettings();
     const merged = { ...current, ...settings, updatedAt: new Date().toISOString() };
 
     // Save to local storage for instant responsiveness
@@ -138,9 +138,9 @@ export const supabaseService = {
   // ==========================================
   // MENU ITEMS
   // ==========================================
-  async getMenuItems(): Promise<MenuItem[]> {
+  async getMenuItems(): Promise<MenuItem[] | null> {
     if (!isSupabaseLive() || !supabase) {
-      return storage.getMenuItems();
+      return null;
     }
 
     try {
@@ -150,7 +150,7 @@ export const supabaseService = {
         .order('category', { ascending: true });
 
       if (error || !data || data.length === 0) {
-        return storage.getMenuItems();
+        return null;
       }
 
       return data.map((d: any) => ({
@@ -171,7 +171,7 @@ export const supabaseService = {
         rating: 5.0,
       }));
     } catch {
-      return storage.getMenuItems();
+      return null;
     }
   },
 
@@ -245,9 +245,9 @@ export const supabaseService = {
   // ==========================================
   // GALLERY IMAGES
   // ==========================================
-  async getGallery(): Promise<GalleryItem[]> {
+  async getGallery(): Promise<GalleryItem[] | null> {
     if (!isSupabaseLive() || !supabase) {
-      return storage.getGallery();
+      return null;
     }
 
     try {
@@ -257,7 +257,7 @@ export const supabaseService = {
         .order('display_order', { ascending: true });
 
       if (error || !data || data.length === 0) {
-        return storage.getGallery();
+        return null;
       }
 
       return data.map((d: any) => ({
@@ -269,7 +269,7 @@ export const supabaseService = {
         displayOrder: d.display_order || 0,
       }));
     } catch {
-      return storage.getGallery();
+      return null;
     }
   },
 

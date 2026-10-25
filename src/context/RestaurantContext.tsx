@@ -111,6 +111,15 @@ export const RestaurantProvider: React.FC<{ children: ReactNode }> = ({ children
       // 1. First fetch server-authoritative shared store
       const serverData = await apiService.getData();
       if (serverData) {
+        // Sync shared Supabase configuration to this device if provided by server
+        if (serverData.supabaseConfig?.url && serverData.supabaseConfig?.anonKey) {
+          const localUrl = localStorage.getItem('broso_supabase_url');
+          if (!localUrl) {
+            localStorage.setItem('broso_supabase_url', serverData.supabaseConfig.url);
+            localStorage.setItem('broso_supabase_anon_key', serverData.supabaseConfig.anonKey);
+          }
+        }
+
         if (serverData.settings) {
           setSettings(serverData.settings);
           storage.saveSettings(serverData.settings);
@@ -137,23 +146,36 @@ export const RestaurantProvider: React.FC<{ children: ReactNode }> = ({ children
         }
       }
 
-      // 2. If Supabase is live, also query Supabase
+      // 2. If Supabase is live, also query Supabase without overwriting server items with fallbacks
       if (isLiveSupabase) {
-        const [fetchedSettings, fetchedMenu, fetchedGallery, fetchedRes, fetchedOrders, fetchedReviews] = await Promise.all([
-          supabaseService.getSettings(),
-          supabaseService.getMenuItems(),
-          supabaseService.getGallery(),
-          supabaseService.getReservations(),
-          supabaseService.getOrders(),
-          supabaseService.getReviews(),
-        ]);
+        try {
+          const [fetchedSettings, fetchedMenu, fetchedGallery, fetchedRes, fetchedOrders, fetchedReviews] = await Promise.all([
+            supabaseService.getSettings(),
+            supabaseService.getMenuItems(),
+            supabaseService.getGallery(),
+            supabaseService.getReservations(),
+            supabaseService.getOrders(),
+            supabaseService.getReviews(),
+          ]);
 
-        if (fetchedSettings) setSettings(fetchedSettings);
-        if (fetchedMenu && fetchedMenu.length > 0) setMenuItems(fetchedMenu);
-        if (fetchedGallery && fetchedGallery.length > 0) setGallery(fetchedGallery);
-        if (fetchedRes) setReservations(fetchedRes);
-        if (fetchedOrders) setOrders(fetchedOrders);
-        if (fetchedReviews) setReviews(fetchedReviews);
+          if (fetchedSettings && fetchedSettings.updatedAt) {
+            setSettings(fetchedSettings);
+            storage.saveSettings(fetchedSettings);
+          }
+          if (fetchedMenu && fetchedMenu.length > 0) {
+            setMenuItems(fetchedMenu);
+            storage.saveMenuItems(fetchedMenu);
+          }
+          if (fetchedGallery && fetchedGallery.length > 0) {
+            setGallery(fetchedGallery);
+            storage.saveGallery(fetchedGallery);
+          }
+          if (fetchedRes && fetchedRes.length > 0) setReservations(fetchedRes);
+          if (fetchedOrders && fetchedOrders.length > 0) setOrders(fetchedOrders);
+          if (fetchedReviews && fetchedReviews.length > 0) setReviews(fetchedReviews);
+        } catch (supErr) {
+          console.warn('Supabase sync skipped, maintaining server state:', supErr);
+        }
       }
     } catch (err) {
       console.warn('Data refresh caught error, utilizing cached local state:', err);
@@ -163,14 +185,38 @@ export const RestaurantProvider: React.FC<{ children: ReactNode }> = ({ children
   useEffect(() => {
     refreshData();
 
-    // Live background polling every 4 seconds to sync changes to ALL visitors across all devices
+    // Live background polling every 3 seconds to sync changes to ALL visitors across all devices
     const pollInterval = setInterval(async () => {
       try {
         const serverData = await apiService.getData();
         if (serverData) {
-          if (serverData.settings) setSettings(serverData.settings);
-          if (serverData.menuItems) setMenuItems(serverData.menuItems);
-          if (serverData.gallery) setGallery(serverData.gallery);
+          if (serverData.settings) {
+            setSettings((prev) => {
+              if (JSON.stringify(prev) !== JSON.stringify(serverData.settings)) {
+                storage.saveSettings(serverData.settings);
+                return serverData.settings;
+              }
+              return prev;
+            });
+          }
+          if (serverData.menuItems && serverData.menuItems.length > 0) {
+            setMenuItems((prev) => {
+              if (JSON.stringify(prev) !== JSON.stringify(serverData.menuItems)) {
+                storage.saveMenuItems(serverData.menuItems);
+                return serverData.menuItems;
+              }
+              return prev;
+            });
+          }
+          if (serverData.gallery && serverData.gallery.length > 0) {
+            setGallery((prev) => {
+              if (JSON.stringify(prev) !== JSON.stringify(serverData.gallery)) {
+                storage.saveGallery(serverData.gallery);
+                return serverData.gallery;
+              }
+              return prev;
+            });
+          }
           if (serverData.reservations) setReservations(serverData.reservations);
           if (serverData.orders) setOrders(serverData.orders);
           if (serverData.reviews) setReviews(serverData.reviews);
@@ -178,7 +224,7 @@ export const RestaurantProvider: React.FC<{ children: ReactNode }> = ({ children
       } catch {
         // quiet fallback
       }
-    }, 4000);
+    }, 3000);
 
     return () => clearInterval(pollInterval);
   }, [refreshData]);
@@ -224,7 +270,7 @@ export const RestaurantProvider: React.FC<{ children: ReactNode }> = ({ children
       .channel('realtime_menu')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, async () => {
         const updated = await supabaseService.getMenuItems();
-        setMenuItems(updated);
+        if (updated && updated.length > 0) setMenuItems(updated);
       })
       .subscribe();
 
@@ -232,7 +278,7 @@ export const RestaurantProvider: React.FC<{ children: ReactNode }> = ({ children
       .channel('realtime_settings')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_settings' }, async () => {
         const updated = await supabaseService.getSettings();
-        setSettings(updated);
+        if (updated) setSettings(updated);
       })
       .subscribe();
 
@@ -240,7 +286,7 @@ export const RestaurantProvider: React.FC<{ children: ReactNode }> = ({ children
       .channel('realtime_gallery')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery_images' }, async () => {
         const updated = await supabaseService.getGallery();
-        setGallery(updated);
+        if (updated && updated.length > 0) setGallery(updated);
       })
       .subscribe();
 
@@ -397,58 +443,71 @@ export const RestaurantProvider: React.FC<{ children: ReactNode }> = ({ children
   };
 
   const handleUpdateMenuItem = async (id: string, updates: Partial<MenuItem>) => {
+    storage.updateMenuItem(id, updates);
+    setMenuItems((prev) => prev.map((m) => (m.id === id ? { ...m, ...updates } : m)));
     await Promise.all([
       apiService.updateMenuItem(id, updates),
       supabaseService.updateMenuItem(id, updates),
     ]);
-    setMenuItems(storage.getMenuItems());
     showToast('Dish details updated.');
   };
 
   const handleDeleteMenuItem = async (id: string) => {
+    storage.deleteMenuItem(id);
+    setMenuItems((prev) => prev.filter((m) => m.id !== id));
     await Promise.all([
       apiService.deleteMenuItem(id),
       supabaseService.deleteMenuItem(id),
     ]);
-    setMenuItems(storage.getMenuItems());
     showToast('Dish removed from menu.');
   };
 
   const handleUpdateSettings = async (updates: Partial<RestaurantSettings>) => {
+    setSettings((prev) => {
+      const merged = { ...prev, ...updates };
+      storage.saveSettings(merged);
+      return merged;
+    });
+
     const [serverRes, updated] = await Promise.all([
       apiService.updateSettings(updates),
       supabaseService.updateSettings(updates),
     ]);
     const finalSettings = serverRes || updated;
-    setSettings(finalSettings);
-    storage.saveSettings(finalSettings);
+    if (finalSettings) {
+      setSettings(finalSettings);
+      storage.saveSettings(finalSettings);
+    }
     showToast('Website content published.');
   };
 
   const handleAddGalleryItem = async (item: Omit<GalleryItem, 'id'>) => {
+    const newItem = storage.addGalleryItem(item);
+    setGallery((prev) => [newItem, ...prev]);
     await Promise.all([
       apiService.addGalleryItem(item),
       supabaseService.addGalleryItem(item),
     ]);
-    setGallery(storage.getGallery());
     showToast('New visual asset published to gallery.');
   };
 
   const handleDeleteGalleryItem = async (id: string) => {
+    storage.deleteGalleryItem(id);
+    setGallery((prev) => prev.filter((g) => g.id !== id));
     await Promise.all([
       apiService.deleteGalleryItem(id),
       supabaseService.deleteGalleryItem(id),
     ]);
-    setGallery(storage.getGallery());
     showToast('Visual asset removed from gallery.');
   };
 
   const handleUpdateGalleryItem = async (id: string, updates: Partial<GalleryItem>) => {
+    storage.updateGalleryItem(id, updates);
+    setGallery((prev) => prev.map((g) => (g.id === id ? { ...g, ...updates } : g)));
     await Promise.all([
       apiService.updateGalleryItem(id, updates),
       supabaseService.updateGalleryItem(id, updates),
     ]);
-    setGallery(storage.getGallery());
     showToast('Gallery image updated.');
   };
 

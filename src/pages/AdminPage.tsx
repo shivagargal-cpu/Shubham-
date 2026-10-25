@@ -655,7 +655,10 @@ export const AdminPage: React.FC = () => {
                         )}
                         <AdminImageUploadBadge
                           folder="general"
-                          onUploaded={(newUrl) => setContentForm((prev) => ({ ...prev, logoUrl: newUrl }))}
+                          onUploaded={async (newUrl) => {
+                            setContentForm((prev) => ({ ...prev, logoUrl: newUrl }));
+                            await handleUpdateSettings({ logoUrl: newUrl });
+                          }}
                           compact
                           title="Upload brand logo from device"
                         />
@@ -748,9 +751,10 @@ export const AdminPage: React.FC = () => {
                     )}
                     <AdminImageUploadBadge
                       folder="hero"
-                      onUploaded={(newUrl) =>
-                        setContentForm((prev) => ({ ...prev, heroImage: newUrl, heroImageUrl: newUrl }))
-                      }
+                      onUploaded={async (newUrl) => {
+                        setContentForm((prev) => ({ ...prev, heroImage: newUrl, heroImageUrl: newUrl }));
+                        await handleUpdateSettings({ heroImage: newUrl, heroImageUrl: newUrl });
+                      }}
                       label="Upload Hero Image"
                       title="Upload hero background from device"
                     />
@@ -873,9 +877,10 @@ export const AdminPage: React.FC = () => {
                     />
                     <AdminImageUploadBadge
                       folder="general"
-                      onUploaded={(newUrl) =>
-                        setContentForm((prev) => ({ ...prev, aboutImage: newUrl, aboutImageUrl: newUrl }))
-                      }
+                      onUploaded={async (newUrl) => {
+                        setContentForm((prev) => ({ ...prev, aboutImage: newUrl, aboutImageUrl: newUrl }));
+                        await handleUpdateSettings({ aboutImage: newUrl, aboutImageUrl: newUrl });
+                      }}
                       label="Upload About Image"
                       title="Upload about section photo from device"
                     />

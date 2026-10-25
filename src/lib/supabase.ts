@@ -43,38 +43,96 @@ export const isSupabaseLive = (): boolean => {
 export const STORAGE_BUCKET = 'restaurant-assets';
 
 /**
- * Upload an image file directly to Supabase Storage bucket `restaurant-assets`.
- * If Supabase is not configured, converts to a persistent data URL or local object URL.
+ * Compress and downscale large image files from mobile cameras
+ */
+const compressImageFile = async (file: File): Promise<{ base64: string; blob: Blob }> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const MAX_DIM = 1600;
+        let { width, height } = img;
+        if (width > MAX_DIM || height > MAX_DIM) {
+          if (width > height) {
+            height = Math.round((height * MAX_DIM) / width);
+            width = MAX_DIM;
+          } else {
+            width = Math.round((width * MAX_DIM) / height);
+            height = MAX_DIM;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          return reject(new Error('Canvas context not available'));
+        }
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const mime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+        const base64 = canvas.toDataURL(mime, 0.85);
+
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              resolve({ base64, blob });
+            } else {
+              resolve({ base64, blob: file });
+            }
+          },
+          mime,
+          0.85
+        );
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+};
+
+/**
+ * Upload an image file directly to Supabase Storage bucket `restaurant-assets` and server store.
+ * Supports large mobile camera photos by automatically optimizing them.
  */
 export const uploadImageToStorage = async (
   file: File,
   folder = 'general'
 ): Promise<{ url: string; path: string; error?: string }> => {
-  // Validate file size (< 5MB)
-  if (file.size > 5 * 1024 * 1024) {
-    return { url: '', path: '', error: 'File size exceeds maximum limit of 5MB.' };
-  }
-
   // Validate mime type
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'];
-  if (!allowedTypes.includes(file.type)) {
-    return { url: '', path: '', error: 'Invalid file format. Please upload JPG, PNG, or WebP.' };
+  const allowedPrefixes = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml', 'image/gif'];
+  if (!allowedPrefixes.some((t) => file.type.startsWith(t))) {
+    return { url: '', path: '', error: 'Invalid format. Please select a JPG, PNG, or WebP photo.' };
   }
 
-  // Generate safe sanitized filename
+  // Compress and prepare image data
+  let base64Data = '';
+  let uploadBlob: Blob = file;
+
+  try {
+    const optimized = await compressImageFile(file);
+    base64Data = optimized.base64;
+    uploadBlob = optimized.blob;
+  } catch {
+    base64Data = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.readAsDataURL(file);
+    });
+  }
+
   const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
   const cleanName = file.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
   const filePath = `${folder}/${Date.now()}_${cleanName.slice(0, 20)}.${ext}`;
 
-  // Convert file to base64 for server-authoritative upload
-  const base64Data: string = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-
-  // 1. Always attempt server-authoritative upload so all users on any device can access it
+  // 1. First upload to server backend so all devices can fetch it
   let serverUrl = '';
   try {
     const serverRes = await fetch('/api/upload', {
@@ -101,7 +159,7 @@ export const uploadImageToStorage = async (
     try {
       const { data, error } = await supabase.storage
         .from(STORAGE_BUCKET)
-        .upload(filePath, file, {
+        .upload(filePath, uploadBlob, {
           cacheControl: '3600',
           upsert: true,
         });
@@ -121,7 +179,7 @@ export const uploadImageToStorage = async (
     }
   }
 
-  // Return server URL or data URL fallback
+  // Return server URL or high-fidelity base64 data URL
   return {
     url: serverUrl || base64Data,
     path: filePath,
