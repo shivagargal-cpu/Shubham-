@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>BROSO - Taste Royale Cuisine</title>
+    <script>
+      // Single Page Application 404 redirect for static hosting
+      // Saves the requested path and redirects to index.html so React Router renders the intended route
+      sessionStorage.redirect = location.href;
+      var path = location.pathname;
+      if (path && path !== '/') {
+        window.location.replace('/' + (location.search || '') + (location.hash || ''));
+      } else {
+        window.location.replace('/');
+      }
+    </script>
+  </head>
+  <body style="background-color: #070d14; color: #c5a880; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0;">
+    <p>Navigating to BROSO Royale...</p>
+  </body>
+</html>

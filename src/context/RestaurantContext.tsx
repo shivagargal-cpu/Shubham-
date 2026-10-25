@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { supabase, isSupabaseLive } from '../lib/supabase';
 import { supabaseService } from '../services/supabaseService';
+import { apiService } from '../services/apiService';
 import { storage } from '../services/storage';
 import { 
   User, 
@@ -74,6 +75,7 @@ interface RestaurantContextType {
   handleDeleteMenuItem: (id: string) => Promise<void>;
   handleUpdateSettings: (updates: Partial<RestaurantSettings>) => Promise<void>;
   handleAddGalleryItem: (item: Omit<GalleryItem, 'id'>) => Promise<void>;
+  handleUpdateGalleryItem: (id: string, updates: Partial<GalleryItem>) => Promise<void>;
   handleDeleteGalleryItem: (id: string) => Promise<void>;
   handleUpdateReservationStatus: (id: string, status: Reservation['status']) => Promise<void>;
   handleUpdateOrderStatus: (id: string, status: Order['status']) => Promise<void>;
@@ -103,31 +105,82 @@ export const RestaurantProvider: React.FC<{ children: ReactNode }> = ({ children
     }, 3500);
   };
 
-  // Initial load from Supabase or Local Storage
+  // Initial load & sync from Server (apiService) + Supabase
   const refreshData = useCallback(async () => {
     try {
-      const [fetchedSettings, fetchedMenu, fetchedGallery, fetchedRes, fetchedOrders, fetchedReviews] = await Promise.all([
-        supabaseService.getSettings(),
-        supabaseService.getMenuItems(),
-        supabaseService.getGallery(),
-        supabaseService.getReservations(),
-        supabaseService.getOrders(),
-        supabaseService.getReviews(),
-      ]);
+      // 1. First fetch server-authoritative shared store
+      const serverData = await apiService.getData();
+      if (serverData) {
+        if (serverData.settings) {
+          setSettings(serverData.settings);
+          storage.saveSettings(serverData.settings);
+        }
+        if (serverData.menuItems && serverData.menuItems.length > 0) {
+          setMenuItems(serverData.menuItems);
+          storage.saveMenuItems(serverData.menuItems);
+        }
+        if (serverData.gallery && serverData.gallery.length > 0) {
+          setGallery(serverData.gallery);
+          storage.saveGallery(serverData.gallery);
+        }
+        if (serverData.reservations) {
+          setReservations(serverData.reservations);
+          storage.saveReservations(serverData.reservations);
+        }
+        if (serverData.orders) {
+          setOrders(serverData.orders);
+          storage.saveOrders(serverData.orders);
+        }
+        if (serverData.reviews) {
+          setReviews(serverData.reviews);
+          storage.saveReviews(serverData.reviews);
+        }
+      }
 
-      setSettings(fetchedSettings);
-      setMenuItems(fetchedMenu);
-      setGallery(fetchedGallery);
-      setReservations(fetchedRes);
-      setOrders(fetchedOrders);
-      setReviews(fetchedReviews);
+      // 2. If Supabase is live, also query Supabase
+      if (isLiveSupabase) {
+        const [fetchedSettings, fetchedMenu, fetchedGallery, fetchedRes, fetchedOrders, fetchedReviews] = await Promise.all([
+          supabaseService.getSettings(),
+          supabaseService.getMenuItems(),
+          supabaseService.getGallery(),
+          supabaseService.getReservations(),
+          supabaseService.getOrders(),
+          supabaseService.getReviews(),
+        ]);
+
+        if (fetchedSettings) setSettings(fetchedSettings);
+        if (fetchedMenu && fetchedMenu.length > 0) setMenuItems(fetchedMenu);
+        if (fetchedGallery && fetchedGallery.length > 0) setGallery(fetchedGallery);
+        if (fetchedRes) setReservations(fetchedRes);
+        if (fetchedOrders) setOrders(fetchedOrders);
+        if (fetchedReviews) setReviews(fetchedReviews);
+      }
     } catch (err) {
       console.warn('Data refresh caught error, utilizing cached local state:', err);
     }
-  }, []);
+  }, [isLiveSupabase]);
 
   useEffect(() => {
     refreshData();
+
+    // Live background polling every 4 seconds to sync changes to ALL visitors across all devices
+    const pollInterval = setInterval(async () => {
+      try {
+        const serverData = await apiService.getData();
+        if (serverData) {
+          if (serverData.settings) setSettings(serverData.settings);
+          if (serverData.menuItems) setMenuItems(serverData.menuItems);
+          if (serverData.gallery) setGallery(serverData.gallery);
+          if (serverData.reservations) setReservations(serverData.reservations);
+          if (serverData.orders) setOrders(serverData.orders);
+          if (serverData.reviews) setReviews(serverData.reviews);
+        }
+      } catch {
+        // quiet fallback
+      }
+    }, 4000);
+
+    return () => clearInterval(pollInterval);
   }, [refreshData]);
 
   // Local storage events synchronization
@@ -270,18 +323,25 @@ export const RestaurantProvider: React.FC<{ children: ReactNode }> = ({ children
     storage.saveCart([]);
   };
 
-  // Database mutations
+  // Database mutations with dual-sync (Server + Supabase)
   const handleBookReservation = async (data: Parameters<typeof storage.createReservation>[0]) => {
-    const res = await supabaseService.createReservation({
+    const payload = {
       ...data,
       userId: currentUser?.id,
-    });
+    };
+    const [_, res] = await Promise.all([
+      apiService.createReservation(payload),
+      supabaseService.createReservation(payload),
+    ]);
     setReservations(storage.getReservations());
     return res;
   };
 
   const handleCancelReservation = async (resId: string) => {
-    await supabaseService.updateReservationStatus(resId, 'cancelled');
+    await Promise.all([
+      apiService.updateReservationStatus(resId, 'cancelled'),
+      supabaseService.updateReservationStatus(resId, 'cancelled'),
+    ]);
     setReservations(storage.getReservations());
     showToast('Reservation cancelled.');
   };
@@ -293,19 +353,26 @@ export const RestaurantProvider: React.FC<{ children: ReactNode }> = ({ children
     dishRecommended?: string;
     visitDate: string;
   }) => {
-    await supabaseService.createReview({
+    const payload = {
       ...data,
       userId: currentUser?.id || 'guest-' + Date.now(),
       userName: currentUser?.name || 'Verified Patron',
       userRole: currentUser?.role === 'admin' ? 'Executive Sommelier' : 'Verified Patron',
       isVerifiedVisit: true,
-    });
+    };
+    await Promise.all([
+      apiService.createReview(payload),
+      supabaseService.createReview(payload),
+    ]);
     setReviews(storage.getReviews());
     showToast('Your verified impression has been submitted.');
   };
 
   const handlePlaceOrder = async (orderData: Parameters<typeof storage.createOrder>[0]) => {
-    const created = await supabaseService.createOrder(orderData);
+    const [_, created] = await Promise.all([
+      apiService.createOrder(orderData),
+      supabaseService.createOrder(orderData),
+    ]);
     handleClearCart();
     setOrders(storage.getOrders());
     return created;
@@ -321,53 +388,91 @@ export const RestaurantProvider: React.FC<{ children: ReactNode }> = ({ children
   };
 
   const handleAddMenuItem = async (item: Omit<MenuItem, 'id'>) => {
-    await supabaseService.addMenuItem(item);
+    await Promise.all([
+      apiService.addMenuItem(item),
+      supabaseService.addMenuItem(item),
+    ]);
     setMenuItems(storage.getMenuItems());
     showToast('New culinary dish added to menu.');
   };
 
   const handleUpdateMenuItem = async (id: string, updates: Partial<MenuItem>) => {
-    await supabaseService.updateMenuItem(id, updates);
+    await Promise.all([
+      apiService.updateMenuItem(id, updates),
+      supabaseService.updateMenuItem(id, updates),
+    ]);
     setMenuItems(storage.getMenuItems());
     showToast('Dish details updated.');
   };
 
   const handleDeleteMenuItem = async (id: string) => {
-    await supabaseService.deleteMenuItem(id);
+    await Promise.all([
+      apiService.deleteMenuItem(id),
+      supabaseService.deleteMenuItem(id),
+    ]);
     setMenuItems(storage.getMenuItems());
     showToast('Dish removed from menu.');
   };
 
   const handleUpdateSettings = async (updates: Partial<RestaurantSettings>) => {
-    const updated = await supabaseService.updateSettings(updates);
-    setSettings(updated);
+    const [serverRes, updated] = await Promise.all([
+      apiService.updateSettings(updates),
+      supabaseService.updateSettings(updates),
+    ]);
+    const finalSettings = serverRes || updated;
+    setSettings(finalSettings);
+    storage.saveSettings(finalSettings);
     showToast('Website content published.');
   };
 
   const handleAddGalleryItem = async (item: Omit<GalleryItem, 'id'>) => {
-    await supabaseService.addGalleryItem(item);
+    await Promise.all([
+      apiService.addGalleryItem(item),
+      supabaseService.addGalleryItem(item),
+    ]);
     setGallery(storage.getGallery());
     showToast('New visual asset published to gallery.');
   };
 
   const handleDeleteGalleryItem = async (id: string) => {
-    await supabaseService.deleteGalleryItem(id);
+    await Promise.all([
+      apiService.deleteGalleryItem(id),
+      supabaseService.deleteGalleryItem(id),
+    ]);
     setGallery(storage.getGallery());
     showToast('Visual asset removed from gallery.');
   };
 
+  const handleUpdateGalleryItem = async (id: string, updates: Partial<GalleryItem>) => {
+    await Promise.all([
+      apiService.updateGalleryItem(id, updates),
+      supabaseService.updateGalleryItem(id, updates),
+    ]);
+    setGallery(storage.getGallery());
+    showToast('Gallery image updated.');
+  };
+
   const handleUpdateReservationStatus = async (id: string, status: Reservation['status']) => {
-    await supabaseService.updateReservationStatus(id, status);
+    await Promise.all([
+      apiService.updateReservationStatus(id, status),
+      supabaseService.updateReservationStatus(id, status),
+    ]);
     setReservations(storage.getReservations());
   };
 
   const handleUpdateOrderStatus = async (id: string, status: Order['status']) => {
-    await supabaseService.updateOrderStatus(id, status);
+    await Promise.all([
+      apiService.updateOrderStatus(id, status),
+      supabaseService.updateOrderStatus(id, status),
+    ]);
     setOrders(storage.getOrders());
   };
 
   const handleUpdateReviewStatus = async (id: string, status: Review['status'], isFeatured?: boolean) => {
-    await supabaseService.updateReviewStatus(id, status, isFeatured);
+    await Promise.all([
+      apiService.updateReviewStatus(id, status, isFeatured),
+      supabaseService.updateReviewStatus(id, status, isFeatured),
+    ]);
     setReviews(storage.getReviews());
   };
 
@@ -409,6 +514,7 @@ export const RestaurantProvider: React.FC<{ children: ReactNode }> = ({ children
         handleDeleteMenuItem,
         handleUpdateSettings,
         handleAddGalleryItem,
+        handleUpdateGalleryItem,
         handleDeleteGalleryItem,
         handleUpdateReservationStatus,
         handleUpdateOrderStatus,

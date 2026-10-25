@@ -306,6 +306,27 @@ export const supabaseService = {
     }
   },
 
+  async updateGalleryItem(id: string, updates: Partial<GalleryItem>): Promise<GalleryItem | null> {
+    const updated = storage.updateGalleryItem(id, updates);
+
+    if (isSupabaseLive() && supabase) {
+      try {
+        const payload: any = {};
+        if (updates.title !== undefined) payload.title = updates.title;
+        if (updates.category !== undefined) payload.category = updates.category;
+        if (updates.imageUrl !== undefined) payload.image_url = updates.imageUrl;
+        if (updates.description !== undefined) payload.description = updates.description;
+        if (updates.displayOrder !== undefined) payload.display_order = updates.displayOrder;
+
+        await supabase.from('gallery_images').update(payload).eq('id', id);
+      } catch (err) {
+        console.warn('Supabase gallery update fallback to local:', err);
+      }
+    }
+
+    return updated;
+  },
+
   // ==========================================
   // RESERVATIONS
   // ==========================================

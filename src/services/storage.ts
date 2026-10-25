@@ -423,6 +423,15 @@ export const storage = {
   deleteGalleryItem(id: string) {
     const gallery = this.getGallery().filter((g) => g.id !== id);
     this.saveGallery(gallery);
+  },
+
+  updateGalleryItem(id: string, updates: Partial<GalleryItem>): GalleryItem | null {
+    const gallery = this.getGallery();
+    const idx = gallery.findIndex((g) => g.id === id);
+    if (idx === -1) return null;
+    gallery[idx] = { ...gallery[idx], ...updates };
+    this.saveGallery(gallery);
+    return gallery[idx];
   }
 };
 

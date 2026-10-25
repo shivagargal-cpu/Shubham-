@@ -66,66 +66,66 @@ export const uploadImageToStorage = async (
   const cleanName = file.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
   const filePath = `${folder}/${Date.now()}_${cleanName.slice(0, 20)}.${ext}`;
 
-  if (!isSupabaseLive() || !supabase) {
-    // Graceful fallback to data URL when Supabase Storage is not yet provisioned
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        resolve({
-          url: reader.result as string,
-          path: filePath,
-        });
-      };
-      reader.onerror = () => {
-        resolve({
-          url: '',
-          path: '',
-          error: 'Failed to process local image file.',
-        });
-      };
-      reader.readAsDataURL(file);
-    });
-  }
+  // Convert file to base64 for server-authoritative upload
+  const base64Data: string = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 
+  // 1. Always attempt server-authoritative upload so all users on any device can access it
+  let serverUrl = '';
   try {
-    const { data, error } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .upload(filePath, file, {
-        cacheControl: '3600',
-        upsert: true,
-      });
-
-    if (error) {
-      console.warn('Supabase storage upload returned error, falling back to data URL:', error.message);
-      // Fallback to data URL if bucket doesn't exist yet so admin workflow isn't blocked
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          resolve({
-            url: reader.result as string,
-            path: filePath,
-            error: `Storage bucket '${STORAGE_BUCKET}' not created yet. Image loaded locally. (Supabase msg: ${error.message})`,
-          });
-        };
-        reader.readAsDataURL(file);
-      });
+    const serverRes = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fileData: base64Data,
+        fileName: file.name,
+        folder,
+      }),
+    });
+    if (serverRes.ok) {
+      const serverJson = await serverRes.json();
+      if (serverJson.url) {
+        serverUrl = serverJson.url;
+      }
     }
-
-    const { data: publicUrlData } = supabase.storage
-      .from(STORAGE_BUCKET)
-      .getPublicUrl(data.path);
-
-    return {
-      url: publicUrlData.publicUrl,
-      path: data.path,
-    };
-  } catch (err: any) {
-    return {
-      url: '',
-      path: '',
-      error: err.message || 'Error occurred during image upload.',
-    };
+  } catch (err) {
+    console.warn('Server upload fallback:', err);
   }
+
+  // 2. If Supabase Storage is active, also upload to Supabase bucket
+  if (isSupabaseLive() && supabase) {
+    try {
+      const { data, error } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true,
+        });
+
+      if (!error && data) {
+        const { data: publicUrlData } = supabase.storage
+          .from(STORAGE_BUCKET)
+          .getPublicUrl(data.path);
+
+        return {
+          url: publicUrlData.publicUrl,
+          path: data.path,
+        };
+      }
+    } catch (err) {
+      console.warn('Supabase storage upload error, utilizing server URL:', err);
+    }
+  }
+
+  // Return server URL or data URL fallback
+  return {
+    url: serverUrl || base64Data,
+    path: filePath,
+  };
 };
 
 /**

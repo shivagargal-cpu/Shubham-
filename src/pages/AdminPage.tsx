@@ -34,6 +34,8 @@ import {
 } from 'lucide-react';
 import { MenuCategory, MenuItem, GalleryItem, RestaurantSettings } from '../types';
 import { uploadImageToStorage, getSupabaseConfig, STORAGE_BUCKET } from '../lib/supabase';
+import { AdminImageUploadBadge } from '../components/AdminImageUploadBadge';
+import { apiService } from '../services/apiService';
 
 type AdminTab = 'overview' | 'content' | 'menu' | 'images' | 'reservations' | 'orders' | 'reviews' | 'database';
 
@@ -53,6 +55,7 @@ export const AdminPage: React.FC = () => {
     handleDeleteMenuItem, 
     handleUpdateSettings,
     handleAddGalleryItem,
+    handleUpdateGalleryItem,
     handleDeleteGalleryItem,
     handleUpdateReservationStatus, 
     handleUpdateOrderStatus, 
@@ -306,13 +309,16 @@ export const AdminPage: React.FC = () => {
     showToast(res.message);
   };
 
-  // Save Supabase Credentials
-  const handleSaveCredentials = (e: React.FormEvent) => {
+  // Save Supabase Credentials (Saved both to server store for all visitors and locally)
+  const handleSaveCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
+    const url = supabaseUrlInput.trim();
+    const anonKey = supabaseKeyInput.trim();
+    await apiService.saveSupabaseConfig(url, anonKey);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('broso_supabase_url', supabaseUrlInput.trim());
-      localStorage.setItem('broso_supabase_anon_key', supabaseKeyInput.trim());
-      showToast('Supabase connection credentials saved! Reloading application...');
+      localStorage.setItem('broso_supabase_url', url);
+      localStorage.setItem('broso_supabase_anon_key', anonKey);
+      showToast('Supabase connection credentials broadcast to all users! Reloading...');
       setTimeout(() => {
         window.location.reload();
       }, 1000);
@@ -634,16 +640,35 @@ export const AdminPage: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                   <div>
                     <label className="block text-[11px] font-semibold uppercase text-[#ded6cc] mb-1">
-                      Logo Image URL or Local Asset
+                      Logo Image & Asset
                     </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={contentForm.logoUrl || ''}
-                        onChange={(e) => setContentForm({ ...contentForm, logoUrl: e.target.value })}
-                        placeholder="Leave blank for monogram"
-                        className="w-full bg-[#070d14] border border-[#c5a880]/30 rounded-sm px-3.5 py-2 text-xs text-[#f8f5f0] focus:outline-none focus:border-[#c5a880]"
-                      />
+                    <div className="flex gap-3 items-center">
+                      <div className="relative group shrink-0 w-14 h-14 rounded-sm overflow-hidden border border-[#c5a880]/40 bg-[#070d14] flex items-center justify-center">
+                        {contentForm.logoUrl ? (
+                          <img
+                            src={contentForm.logoUrl}
+                            alt="Brand Logo"
+                            className="w-full h-full object-contain p-1"
+                          />
+                        ) : (
+                          <span className="font-cinzel text-xs font-bold text-[#c5a880]">BROSO</span>
+                        )}
+                        <AdminImageUploadBadge
+                          folder="general"
+                          onUploaded={(newUrl) => setContentForm((prev) => ({ ...prev, logoUrl: newUrl }))}
+                          compact
+                          title="Upload brand logo from device"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <input
+                          type="text"
+                          value={contentForm.logoUrl || ''}
+                          onChange={(e) => setContentForm({ ...contentForm, logoUrl: e.target.value })}
+                          placeholder="Upload from top-left or enter URL"
+                          className="w-full bg-[#070d14] border border-[#c5a880]/30 rounded-sm px-3.5 py-2 text-xs text-[#f8f5f0] focus:outline-none focus:border-[#c5a880]"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -707,22 +732,40 @@ export const AdminPage: React.FC = () => {
 
                 <div>
                   <label className="block text-[11px] font-semibold uppercase text-[#ded6cc] mb-1">
-                    Hero Background Image URL
+                    Hero Background Photography
                   </label>
-                  <div className="flex gap-3 items-center">
-                    <input
-                      type="text"
-                      value={contentForm.heroImage}
-                      onChange={(e) => setContentForm({ ...contentForm, heroImage: e.target.value })}
-                      className="w-full bg-[#070d14] border border-[#c5a880]/30 rounded-sm px-3.5 py-2 text-xs text-[#f8f5f0]"
-                    />
-                    {contentForm.heroImage && (
+                  <div className="relative group w-full h-44 rounded-sm overflow-hidden border border-[#c5a880]/40 bg-[#070d14]">
+                    {contentForm.heroImage ? (
                       <img
                         src={contentForm.heroImage}
-                        alt="Hero Preview"
-                        className="w-16 h-10 object-cover rounded border border-[#c5a880]/40 shrink-0"
+                        alt="Hero Showcase Preview"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-xs text-[#8e8275]">
+                        No hero background chosen
+                      </div>
                     )}
+                    <AdminImageUploadBadge
+                      folder="hero"
+                      onUploaded={(newUrl) =>
+                        setContentForm((prev) => ({ ...prev, heroImage: newUrl, heroImageUrl: newUrl }))
+                      }
+                      label="Upload Hero Image"
+                      title="Upload hero background from device"
+                    />
+                    <div className="absolute bottom-2 left-2 right-2 bg-[#060a10]/90 backdrop-blur-sm p-2 rounded-sm border border-[#c5a880]/30 flex items-center gap-2">
+                      <span className="text-[10px] text-[#c5a880] uppercase font-bold shrink-0">URL:</span>
+                      <input
+                        type="text"
+                        value={contentForm.heroImage}
+                        onChange={(e) =>
+                          setContentForm({ ...contentForm, heroImage: e.target.value, heroImageUrl: e.target.value })
+                        }
+                        placeholder="Hero image URL or upload from top-left"
+                        className="w-full bg-transparent text-xs text-[#f8f5f0] focus:outline-none"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -815,6 +858,39 @@ export const AdminPage: React.FC = () => {
                       onChange={(e) => setContentForm({ ...contentForm, masterChefsCount: e.target.value })}
                       className="w-full bg-[#070d14] border border-[#c5a880]/30 rounded-sm px-3.5 py-2 text-xs text-[#f8f5f0]"
                     />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase text-[#ded6cc] mb-1">
+                    About Heritage Story Photography
+                  </label>
+                  <div className="relative group w-full h-44 rounded-sm overflow-hidden border border-[#c5a880]/40 bg-[#070d14]">
+                    <img
+                      src={contentForm.aboutImage || '/src/assets/images/culinary_wine_cellar_1792868412693.jpg'}
+                      alt="About Heritage Preview"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <AdminImageUploadBadge
+                      folder="general"
+                      onUploaded={(newUrl) =>
+                        setContentForm((prev) => ({ ...prev, aboutImage: newUrl, aboutImageUrl: newUrl }))
+                      }
+                      label="Upload About Image"
+                      title="Upload about section photo from device"
+                    />
+                    <div className="absolute bottom-2 left-2 right-2 bg-[#060a10]/90 backdrop-blur-sm p-2 rounded-sm border border-[#c5a880]/30 flex items-center gap-2">
+                      <span className="text-[10px] text-[#c5a880] uppercase font-bold shrink-0">URL:</span>
+                      <input
+                        type="text"
+                        value={contentForm.aboutImage || ''}
+                        onChange={(e) =>
+                          setContentForm({ ...contentForm, aboutImage: e.target.value, aboutImageUrl: e.target.value })
+                        }
+                        placeholder="About image URL or upload from top-left"
+                        className="w-full bg-transparent text-xs text-[#f8f5f0] focus:outline-none"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -995,12 +1071,22 @@ export const AdminPage: React.FC = () => {
                     <tr key={dish.id} className="hover:bg-[#070d14]/60 transition-colors">
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
-                          <img
-                            src={dish.imageUrl}
-                            alt={dish.name}
-                            className="w-12 h-12 rounded-sm object-cover shrink-0 border border-[#c5a880]/30"
-                            referrerPolicy="no-referrer"
-                          />
+                          <div className="relative group shrink-0 w-14 h-14 rounded-sm overflow-hidden border border-[#c5a880]/30 bg-[#070d14]">
+                            <img
+                              src={dish.imageUrl}
+                              alt={dish.name}
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                            <AdminImageUploadBadge
+                              folder="dishes"
+                              onUploaded={async (newUrl) => {
+                                await handleUpdateMenuItem(dish.id, { imageUrl: newUrl });
+                              }}
+                              compact
+                              title={`Upload / Replace image for ${dish.name}`}
+                            />
+                          </div>
                           <div>
                             <div className="flex items-center gap-2">
                               <p className="font-cinzel font-bold text-[#f8f5f0]">{dish.name}</p>
@@ -1152,7 +1238,20 @@ export const AdminPage: React.FC = () => {
                     {recentUploads.map((up, idx) => (
                       <div key={idx} className="p-2.5 bg-[#070d14] border border-[#c5a880]/20 rounded-sm flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2.5 overflow-hidden">
-                          <img src={up.url} alt={up.name} className="w-9 h-9 object-cover rounded-sm shrink-0" />
+                          <div className="relative group shrink-0 w-10 h-10 rounded-sm overflow-hidden border border-[#c5a880]/30 bg-[#070d14]">
+                            <img src={up.url} alt={up.name} className="w-full h-full object-cover" />
+                            <AdminImageUploadBadge
+                              folder={uploadFolder}
+                              onUploaded={(newUrl) => {
+                                setRecentUploads((prev) => [
+                                  { name: 'Updated image', url: newUrl, time: new Date().toLocaleTimeString() },
+                                  ...prev.slice(0, 9),
+                                ]);
+                              }}
+                              compact
+                              title="Upload and replace this image"
+                            />
+                          </div>
                           <div className="truncate">
                             <p className="font-semibold text-[#f8f5f0] truncate">{up.name}</p>
                             <p className="text-[10px] text-[#8e8275]">{up.time}</p>
@@ -1181,14 +1280,22 @@ export const AdminPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {gallery.map((item) => (
                   <div key={item.id} className="bg-[#0a111a] border border-[#c5a880]/20 rounded-sm overflow-hidden flex flex-col justify-between group">
-                    <div className="relative h-44 overflow-hidden bg-[#070d14]">
+                    <div className="relative h-48 overflow-hidden bg-[#070d14]">
                       <img
                         src={item.imageUrl}
                         alt={item.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         referrerPolicy="no-referrer"
                       />
-                      <span className="absolute top-2 left-2 px-2 py-0.5 bg-[#060a10]/80 border border-[#c5a880]/30 text-[10px] text-[#c5a880] font-bold uppercase rounded">
+                      <AdminImageUploadBadge
+                        folder="gallery"
+                        onUploaded={async (newUrl) => {
+                          await handleUpdateGalleryItem(item.id, { imageUrl: newUrl });
+                        }}
+                        label="Replace Image"
+                        title={`Upload / Replace image for "${item.title}"`}
+                      />
+                      <span className="absolute top-2 right-2 px-2 py-0.5 bg-[#060a10]/85 border border-[#c5a880]/30 text-[10px] text-[#c5a880] font-bold uppercase rounded z-10">
                         {item.category}
                       </span>
                     </div>
@@ -1766,11 +1873,19 @@ export const AdminPage: React.FC = () => {
                   Dish Photograph
                 </label>
                 <div className="flex gap-3 items-center">
-                  <img
-                    src={dishImage}
-                    alt="Preview"
-                    className="w-14 h-14 rounded-sm object-cover border border-[#c5a880]/40 shrink-0"
-                  />
+                  <div className="relative group shrink-0 w-16 h-16 rounded-sm overflow-hidden border border-[#c5a880]/40 bg-[#070d14]">
+                    <img
+                      src={dishImage}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                    />
+                    <AdminImageUploadBadge
+                      folder="dishes"
+                      onUploaded={(newUrl) => setDishImage(newUrl)}
+                      compact
+                      title="Upload dish photo from device"
+                    />
+                  </div>
                   <div className="flex-1 space-y-1.5">
                     <input
                       type="text"
@@ -1888,16 +2003,33 @@ export const AdminPage: React.FC = () => {
 
               <div>
                 <label className="block text-[11px] font-semibold uppercase text-[#ded6cc] mb-1">
-                  Image URL or Path *
+                  Image URL or Direct Upload *
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={galleryUrl}
-                  onChange={(e) => setGalleryUrl(e.target.value)}
-                  placeholder="https://... or /src/assets/..."
-                  className="w-full bg-[#070d14] border border-[#c5a880]/30 rounded-sm px-3.5 py-2 text-xs text-[#f8f5f0]"
-                />
+                <div className="flex gap-3 items-center">
+                  <div className="relative group shrink-0 w-14 h-14 rounded-sm overflow-hidden border border-[#c5a880]/40 bg-[#070d14] flex items-center justify-center">
+                    {galleryUrl ? (
+                      <img src={galleryUrl} alt="Gallery Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <ImageIcon className="w-6 h-6 text-[#8e8275]" />
+                    )}
+                    <AdminImageUploadBadge
+                      folder="gallery"
+                      onUploaded={(newUrl) => setGalleryUrl(newUrl)}
+                      compact
+                      title="Upload photo from device"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      required
+                      value={galleryUrl}
+                      onChange={(e) => setGalleryUrl(e.target.value)}
+                      placeholder="Upload via top-left or enter URL/path"
+                      className="w-full bg-[#070d14] border border-[#c5a880]/30 rounded-sm px-3.5 py-2 text-xs text-[#f8f5f0]"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div>
