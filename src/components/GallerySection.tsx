@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { Maximize2, X, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 import { GalleryItem } from '../types';
 import { useRestaurant } from '../context/RestaurantContext';
+import { AdminImageUploadBadge } from './AdminImageUploadBadge';
 
 export const GallerySection: React.FC = () => {
-  const { gallery } = useRestaurant();
+  const { gallery, handleUpdateGalleryItem } = useRestaurant();
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [activeLightboxIndex, setActiveLightboxIndex] = useState<number | null>(null);
 
@@ -68,10 +69,19 @@ export const GallerySection: React.FC = () => {
               onClick={() => setActiveLightboxIndex(idx)}
               className="relative h-72 rounded-sm overflow-hidden border border-[#c5a880]/20 group cursor-pointer shadow-lg bg-[#0a111a]"
             >
+              <AdminImageUploadBadge
+                folder="gallery"
+                label="Change"
+                compact
+                title={`Admin: Replace gallery photo (${item.title})`}
+                onUploaded={async (newUrl) => {
+                  await handleUpdateGalleryItem(item.id, { imageUrl: newUrl });
+                }}
+              />
               <img
                 src={item.imageUrl}
                 alt={item.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 brightness-90"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 brightness-95"
                 referrerPolicy="no-referrer"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-[#060a10]/90 via-[#060a10]/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-5">
@@ -124,7 +134,15 @@ export const GallerySection: React.FC = () => {
             onClick={(e) => e.stopPropagation()}
             className="max-w-4xl w-full flex flex-col items-center"
           >
-            <div className="max-h-[75vh] overflow-hidden rounded-sm border border-[#c5a880]/40 shadow-2xl">
+            <div className="relative max-h-[75vh] overflow-hidden rounded-sm border border-[#c5a880]/40 shadow-2xl">
+              <AdminImageUploadBadge
+                folder="gallery"
+                label="Replace Photo"
+                title={`Admin: Replace photo for ${filteredGallery[activeLightboxIndex].title}`}
+                onUploaded={async (newUrl) => {
+                  await handleUpdateGalleryItem(filteredGallery[activeLightboxIndex].id, { imageUrl: newUrl });
+                }}
+              />
               <img
                 src={filteredGallery[activeLightboxIndex].imageUrl}
                 alt={filteredGallery[activeLightboxIndex].title}

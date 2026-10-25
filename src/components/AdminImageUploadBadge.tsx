@@ -21,12 +21,17 @@ export const AdminImageUploadBadge: React.FC<AdminImageUploadBadgeProps> = ({
   onUploaded,
   compact = false,
   label = 'Upload',
-  title = 'Click to upload and replace image from your device',
+  title = 'Admin: Upload & replace image from device',
   className = '',
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const { showToast } = useRestaurant();
+  const { currentUser, showToast } = useRestaurant();
+
+  // STRICT SECURITY & UX CHECK: Only logged-in admin can see or use this badge
+  if (!currentUser || currentUser.role !== 'admin') {
+    return null;
+  }
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -52,7 +57,7 @@ export const AdminImageUploadBadge: React.FC<AdminImageUploadBadgeProps> = ({
   };
 
   return (
-    <div className={`absolute top-1.5 left-1.5 z-20 ${className}`}>
+    <div className={`absolute top-2 left-2 z-30 pointer-events-auto ${className}`}>
       <input
         type="file"
         ref={fileInputRef}
@@ -64,28 +69,27 @@ export const AdminImageUploadBadge: React.FC<AdminImageUploadBadgeProps> = ({
       <button
         type="button"
         onClick={(e) => {
+          e.preventDefault();
           e.stopPropagation();
           fileInputRef.current?.click();
         }}
         disabled={isUploading}
         title={title}
         aria-label={title}
-        className={`bg-[#060a10]/90 hover:bg-[#c5a880] text-[#c5a880] hover:text-[#070d14] border border-[#c5a880]/70 rounded-xs shadow-xl transition-all duration-200 backdrop-blur-sm cursor-pointer flex items-center gap-1 active:scale-95 ${
+        className={`bg-[#060a10]/95 hover:bg-[#c5a880] text-[#c5a880] hover:text-[#070d14] border border-[#c5a880] rounded shadow-2xl transition-all duration-200 backdrop-blur-md cursor-pointer flex items-center gap-1.5 active:scale-95 group ring-1 ring-[#c5a880]/30 hover:ring-[#c5a880] ${
           compact
-            ? 'p-1 hover:scale-105'
-            : 'px-2 py-1 text-[10px] font-cinzel font-bold uppercase tracking-wider'
+            ? 'p-1.5 hover:scale-105'
+            : 'px-2.5 py-1 text-[10px] font-cinzel font-bold uppercase tracking-wider'
         }`}
       >
         {isUploading ? (
-          <RefreshCw className="w-3 h-3 animate-spin text-[#c5a880]" />
+          <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#c5a880] group-hover:text-[#070d14]" />
         ) : (
-          <Upload className="w-3 h-3" />
+          <Upload className="w-3.5 h-3.5" />
         )}
-        {!compact && (
-          <span className="hidden sm:inline">
-            {isUploading ? 'Uploading...' : label}
-          </span>
-        )}
+        <span className={compact ? 'hidden sm:inline text-[9px] font-cinzel' : ''}>
+          {isUploading ? 'Uploading...' : label}
+        </span>
       </button>
     </div>
   );

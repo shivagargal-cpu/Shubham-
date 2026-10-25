@@ -1,6 +1,8 @@
 import React from 'react';
 import { Star, Plus, Wine, ArrowUpRight } from 'lucide-react';
 import { MenuItem } from '../types';
+import { useRestaurant } from '../context/RestaurantContext';
+import { AdminImageUploadBadge } from './AdminImageUploadBadge';
 
 interface ChefsSpecialsProps {
   onAddToCart: (item: MenuItem, quantity: number) => void;
@@ -8,6 +10,8 @@ interface ChefsSpecialsProps {
 }
 
 export const ChefsSpecials: React.FC<ChefsSpecialsProps> = ({ onAddToCart, onReserveTable }) => {
+  const { menuItems, handleUpdateMenuItem } = useRestaurant();
+
   const specials: (MenuItem & { accolades: string })[] = [
     {
       id: 'main-1',
@@ -79,32 +83,42 @@ export const ChefsSpecials: React.FC<ChefsSpecialsProps> = ({ onAddToCart, onRes
 
         {/* 3 Special Cards Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {specials.map((dish) => (
-            <div
-              key={dish.id}
-              className="bg-[#080e16] border border-[#c5a880]/25 rounded-sm overflow-hidden flex flex-col justify-between group hover:border-[#c5a880] transition-all duration-300 shadow-xl"
-            >
-              {/* Image Frame */}
-              <div className="relative h-72 overflow-hidden">
-                <img
-                  src={dish.imageUrl}
-                  alt={dish.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 brightness-90"
-                  referrerPolicy="no-referrer"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#080e16] via-transparent to-transparent opacity-90" />
-                
-                {/* Accolade ribbon */}
-                <div className="absolute top-4 left-4 bg-[#c5a880] text-[#070d14] text-[10px] font-bold tracking-widest uppercase px-2.5 py-1 rounded-sm shadow-md">
-                  {dish.accolades}
-                </div>
+          {specials.map((dish) => {
+            const liveDish = menuItems.find((m) => m.id === dish.id) || dish;
+            return (
+              <div
+                key={dish.id}
+                className="bg-[#080e16] border border-[#c5a880]/25 rounded-sm overflow-hidden flex flex-col justify-between group hover:border-[#c5a880] transition-all duration-300 shadow-xl"
+              >
+                {/* Image Frame */}
+                <div className="relative h-72 overflow-hidden">
+                  <AdminImageUploadBadge
+                    folder="menu"
+                    label="Change Photo"
+                    title={`Admin: Replace photo for ${liveDish.name}`}
+                    onUploaded={async (newUrl) => {
+                      await handleUpdateMenuItem(dish.id, { imageUrl: newUrl });
+                    }}
+                  />
+                  <img
+                    src={liveDish.imageUrl}
+                    alt={liveDish.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 brightness-90"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#080e16] via-transparent to-transparent opacity-90" />
+                  
+                  {/* Accolade ribbon */}
+                  <div className="absolute bottom-4 left-4 bg-[#c5a880] text-[#070d14] text-[10px] font-bold tracking-widest uppercase px-2.5 py-1 rounded-sm shadow-md">
+                    {dish.accolades}
+                  </div>
 
-                {/* Rating */}
-                <div className="absolute top-4 right-4 bg-[#070d14]/85 backdrop-blur-md border border-[#c5a880]/30 px-2 py-0.5 rounded-sm flex items-center gap-1 text-[11px] text-[#e8c794]">
-                  <Star className="w-3 h-3 fill-[#c5a880] text-[#c5a880]" />
-                  <span className="font-bold tabular-nums">5.0</span>
+                  {/* Rating */}
+                  <div className="absolute top-4 right-4 bg-[#070d14]/85 backdrop-blur-md border border-[#c5a880]/30 px-2 py-0.5 rounded-sm flex items-center gap-1 text-[11px] text-[#e8c794]">
+                    <Star className="w-3 h-3 fill-[#c5a880] text-[#c5a880]" />
+                    <span className="font-bold tabular-nums">5.0</span>
+                  </div>
                 </div>
-              </div>
 
               {/* Body */}
               <div className="p-6 flex flex-col flex-grow">
@@ -141,11 +155,11 @@ export const ChefsSpecials: React.FC<ChefsSpecialsProps> = ({ onAddToCart, onRes
                     <span>Order Now</span>
                   </button>
                 </div>
-
               </div>
             </div>
-          ))}
-        </div>
+          );
+        })}
+      </div>
 
       </div>
     </section>

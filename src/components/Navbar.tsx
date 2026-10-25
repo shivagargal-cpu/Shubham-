@@ -13,9 +13,10 @@ import {
   UtensilsCrossed 
 } from 'lucide-react';
 import { useRestaurant } from '../context/RestaurantContext';
+import { AdminImageUploadBadge } from './AdminImageUploadBadge';
 
 export const Navbar: React.FC = () => {
-  const { currentUser, cart, handleLogout, settings } = useRestaurant();
+  const { currentUser, cart, handleLogout, settings, handleUpdateSettings } = useRestaurant();
   const navigate = useNavigate();
 
   const [isScrolled, setIsScrolled] = useState(false);
@@ -53,30 +54,42 @@ export const Navbar: React.FC = () => {
         <div className="flex items-center justify-between gap-4 md:gap-8">
           
           {/* ZONE 1: BRAND LOGO */}
-          <Link to="/" className="flex items-center gap-3 shrink-0 group">
-            {/* Elegant Circular Monogram or Custom Logo */}
-            {settings.logoUrl ? (
-              <img 
-                src={settings.logoUrl} 
-                alt={settings.brandName} 
-                className="w-10 h-10 rounded-full object-cover border border-[#c5a880]/60 shadow-inner" 
-              />
-            ) : (
-              <div className="w-10 h-10 rounded-full border border-[#c5a880]/60 flex items-center justify-center bg-[#070d14]/80 group-hover:border-[#c5a880] transition-colors shadow-inner">
-                <span className="font-cinzel text-sm font-semibold tracking-widest text-[#c5a880]">
-                  {settings.brandName.charAt(0)}
+          <div className="relative flex items-center shrink-0">
+            <AdminImageUploadBadge
+              folder="brand"
+              label="Logo"
+              compact
+              className="-top-1 -left-2"
+              title="Admin: Upload & replace brand logo"
+              onUploaded={async (newUrl) => {
+                await handleUpdateSettings({ logoUrl: newUrl });
+              }}
+            />
+            <Link to="/" className="flex items-center gap-3 group">
+              {/* Elegant Circular Monogram or Custom Logo */}
+              {settings.logoUrl ? (
+                <img 
+                  src={settings.logoUrl} 
+                  alt={settings.brandName} 
+                  className="w-10 h-10 rounded-full object-cover border border-[#c5a880]/60 shadow-inner" 
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full border border-[#c5a880]/60 flex items-center justify-center bg-[#070d14]/80 group-hover:border-[#c5a880] transition-colors shadow-inner">
+                  <span className="font-cinzel text-sm font-semibold tracking-widest text-[#c5a880]">
+                    {settings.brandName.charAt(0)}
+                  </span>
+                </div>
+              )}
+              <div className="flex flex-col">
+                <span className="font-cinzel text-xl md:text-2xl font-bold tracking-[0.25em] text-[#f8f5f0] group-hover:text-[#c5a880] transition-colors whitespace-nowrap">
+                  {settings.brandName}
+                </span>
+                <span className="text-[9px] tracking-[0.3em] uppercase text-[#c5a880]/80 font-medium -mt-1 hidden sm:block">
+                  Taste Royale
                 </span>
               </div>
-            )}
-            <div className="flex flex-col">
-              <span className="font-cinzel text-xl md:text-2xl font-bold tracking-[0.25em] text-[#f8f5f0] group-hover:text-[#c5a880] transition-colors whitespace-nowrap">
-                {settings.brandName}
-              </span>
-              <span className="text-[9px] tracking-[0.3em] uppercase text-[#c5a880]/80 font-medium -mt-1 hidden sm:block">
-                Taste Royale
-              </span>
-            </div>
-          </Link>
+            </Link>
+          </div>
 
           {/* ZONE 2: DESKTOP NAV LINKS (Real React Router Links) */}
           <nav className="hidden lg:flex items-center gap-7 text-[13px] tracking-wider uppercase font-medium text-[#c4b5a5]">

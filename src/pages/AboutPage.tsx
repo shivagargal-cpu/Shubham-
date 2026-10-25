@@ -3,23 +3,26 @@ import { AboutSection } from '../components/AboutSection';
 import { WhyChooseUs } from '../components/WhyChooseUs';
 import { useNavigate, Link } from 'react-router-dom';
 import { Award, Utensils, Star, ArrowUpRight, Wine, Sparkles } from 'lucide-react';
+import { useRestaurant } from '../context/RestaurantContext';
+import { AdminImageUploadBadge } from '../components/AdminImageUploadBadge';
 
 export const AboutPage: React.FC = () => {
   const navigate = useNavigate();
+  const { settings, handleUpdateSettings } = useRestaurant();
 
   const chefs = [
     {
       name: 'Chef Alessandro Rossi',
       role: 'Executive Chef & Culinary Director',
       bio: 'Trained in Modena and San Sebastián, Alessandro brings three decades of haute cuisine discipline, harmonizing European precision with antique spice traditions.',
-      image: '/src/assets/images/chef_plating_dish_1792868334890.jpg',
+      image: (settings as any).chef1Image || '/src/assets/images/chef_plating_dish_1792868334890.jpg',
       accolades: 'Michelin Star Alum · 3 Stars Mentorship'
     },
     {
       name: 'Ustad Tariq Qureshi',
       role: 'Master of Awadhi Imperial Heritage',
       bio: 'Seventh-generation descendant of royal court khansamas of Lucknow, Tariq curates our 36-hour slow-cooked gravies, handi dum techniques, and potli herbal reductions.',
-      image: '/src/assets/images/food_wagyu_steak_1792868333122.jpg',
+      image: (settings as any).chef2Image || '/src/assets/images/food_wagyu_steak_1792868333122.jpg',
       accolades: 'Golden Handi Distinction · Royal Spicery Guardian'
     }
   ];
@@ -67,6 +70,18 @@ export const AboutPage: React.FC = () => {
                 className="bg-[#0a111a] border border-[#c5a880]/20 rounded-sm overflow-hidden flex flex-col sm:flex-row group hover:border-[#c5a880]/60 transition-all duration-300"
               >
                 <div className="sm:w-1/2 h-64 sm:h-auto overflow-hidden relative">
+                  <AdminImageUploadBadge
+                    folder="chefs"
+                    label="Change Photo"
+                    title={`Admin: Replace portrait for ${chef.name}`}
+                    onUploaded={async (newUrl) => {
+                      if (idx === 0) {
+                        await handleUpdateSettings({ chef1Image: newUrl } as any);
+                      } else {
+                        await handleUpdateSettings({ chef2Image: newUrl } as any);
+                      }
+                    }}
+                  />
                   <img
                     src={chef.image}
                     alt={chef.name}

@@ -4,11 +4,12 @@ import { Hero } from '../components/Hero';
 import { RestaurantHighlights } from '../components/RestaurantHighlights';
 import { ChefsSpecials } from '../components/ChefsSpecials';
 import { useRestaurant } from '../context/RestaurantContext';
+import { AdminImageUploadBadge } from '../components/AdminImageUploadBadge';
 import { ArrowUpRight, Award, Star, Quote, ChevronRight, ShieldCheck } from 'lucide-react';
 
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
-  const { handleAddToCart, reviews } = useRestaurant();
+  const { handleAddToCart, reviews, settings, handleUpdateSettings } = useRestaurant();
 
   const featuredReviews = reviews.filter((r) => r.isFeatured || r.rating === 5).slice(0, 3);
 
@@ -30,8 +31,16 @@ export const HomePage: React.FC = () => {
             
             <div className="lg:col-span-6 relative">
               <div className="rounded-sm overflow-hidden border border-[#c5a880]/30 shadow-2xl relative group">
+                <AdminImageUploadBadge
+                  folder="about"
+                  label="Change Image"
+                  title="Admin: Upload & replace story preview photo"
+                  onUploaded={async (newUrl) => {
+                    await handleUpdateSettings({ aboutImageUrl: newUrl, aboutImage: newUrl });
+                  }}
+                />
                 <img
-                  src="/src/assets/images/chef_plating_dish_1792868334890.jpg"
+                  src={settings.aboutImageUrl || "/src/assets/images/chef_plating_dish_1792868334890.jpg"}
                   alt="Executive Chef Plating"
                   className="w-full h-[400px] object-cover object-center group-hover:scale-105 transition-transform duration-700 brightness-90"
                   referrerPolicy="no-referrer"

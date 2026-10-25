@@ -1,6 +1,7 @@
 import React from 'react';
 import { ArrowUpRight, Award, Compass, HeartHandshake, Sparkles } from 'lucide-react';
 import { useRestaurant } from '../context/RestaurantContext';
+import { AdminImageUploadBadge } from './AdminImageUploadBadge';
 
 interface AboutSectionProps {
   onDiscoverMore: () => void;
@@ -8,7 +9,7 @@ interface AboutSectionProps {
 }
 
 export const AboutSection: React.FC<AboutSectionProps> = ({ onDiscoverMore, onReserveTable }) => {
-  const { settings } = useRestaurant();
+  const { settings, handleUpdateSettings } = useRestaurant();
 
   return (
     <section id="about" className="relative bg-[#070d14] py-24 border-b border-[#c5a880]/15 overflow-hidden">
@@ -22,6 +23,14 @@ export const AboutSection: React.FC<AboutSectionProps> = ({ onDiscoverMore, onRe
           {/* LEFT: Atmospheric Image Collage */}
           <div className="lg:col-span-6 relative">
             <div className="relative rounded-sm overflow-hidden border border-[#c5a880]/30 shadow-2xl group">
+              <AdminImageUploadBadge
+                folder="about"
+                label="Change Story Photo"
+                title="Admin: Upload & replace about story photo"
+                onUploaded={async (newUrl) => {
+                  await handleUpdateSettings({ aboutImageUrl: newUrl, aboutImage: newUrl });
+                }}
+              />
               <img
                 src={settings.aboutImageUrl || "/src/assets/images/chef_plating_dish_1792868334890.jpg"}
                 alt="Executive Chef Plating Fine Dining Creation"

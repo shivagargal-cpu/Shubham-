@@ -13,6 +13,8 @@ import {
   X
 } from 'lucide-react';
 import { MenuItem, MenuCategory } from '../types';
+import { useRestaurant } from '../context/RestaurantContext';
+import { AdminImageUploadBadge } from './AdminImageUploadBadge';
 
 interface FeaturedMenuProps {
   menuItems: MenuItem[];
@@ -21,6 +23,7 @@ interface FeaturedMenuProps {
 }
 
 export const FeaturedMenu: React.FC<FeaturedMenuProps> = ({ menuItems, onAddToCart }) => {
+  const { handleUpdateMenuItem } = useRestaurant();
   const [selectedCategory, setSelectedCategory] = useState<MenuCategory>('All');
   const [dietaryFilter, setDietaryFilter] = useState<'all' | 'veg' | 'non-veg' | 'specials'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -218,6 +221,15 @@ export const FeaturedMenu: React.FC<FeaturedMenuProps> = ({ menuItems, onAddToCa
               >
                 {/* Image Slot with Fallback */}
                 <div className="relative h-60 overflow-hidden cursor-pointer" onClick={() => handleOpenModal(dish)}>
+                  <AdminImageUploadBadge
+                    folder="menu"
+                    label="Change Photo"
+                    compact
+                    title={`Admin: Replace image for ${dish.name}`}
+                    onUploaded={async (newUrl) => {
+                      await handleUpdateMenuItem(dish.id, { imageUrl: newUrl });
+                    }}
+                  />
                   <img
                     src={dish.imageUrl}
                     alt={dish.name}
@@ -227,7 +239,7 @@ export const FeaturedMenu: React.FC<FeaturedMenuProps> = ({ menuItems, onAddToCa
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0a111a] via-transparent to-transparent opacity-80" />
 
                   {/* Dietary Indicator Badge */}
-                  <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2 py-1 bg-[#070d14]/85 backdrop-blur-md rounded-sm border border-[#c5a880]/30 text-[10px] uppercase tracking-wider font-semibold">
+                  <div className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2 py-1 bg-[#070d14]/85 backdrop-blur-md rounded-sm border border-[#c5a880]/30 text-[10px] uppercase tracking-wider font-semibold">
                     <span 
                       className={`w-2 h-2 rounded-full ${
                         dish.isVegetarian ? 'bg-emerald-500' : 'bg-amber-600'
@@ -336,6 +348,15 @@ export const FeaturedMenu: React.FC<FeaturedMenuProps> = ({ menuItems, onAddToCa
             </button>
 
             <div className="relative h-56">
+              <AdminImageUploadBadge
+                folder="menu"
+                label="Replace Photo"
+                title={`Admin: Replace photo for ${selectedDishModal.name}`}
+                onUploaded={async (newUrl) => {
+                  await handleUpdateMenuItem(selectedDishModal.id, { imageUrl: newUrl });
+                  setSelectedDishModal((prev) => (prev ? { ...prev, imageUrl: newUrl } : null));
+                }}
+              />
               <img
                 src={selectedDishModal.imageUrl}
                 alt={selectedDishModal.name}

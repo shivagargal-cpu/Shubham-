@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowUpRight, Award, Utensils, Sparkles, ChevronRight, ChevronLeft } from 'lucide-react';
 
 import { useRestaurant } from '../context/RestaurantContext';
+import { AdminImageUploadBadge } from './AdminImageUploadBadge';
 
 interface HeroProps {
   onExploreMenu: () => void;
@@ -9,7 +10,7 @@ interface HeroProps {
 }
 
 export const Hero: React.FC<HeroProps> = ({ onExploreMenu, onReserveTable }) => {
-  const { settings } = useRestaurant();
+  const { settings, handleUpdateSettings } = useRestaurant();
   const [currentSlide, setCurrentSlide] = useState(0);
 
   const heroSlides = [
@@ -33,6 +34,15 @@ export const Hero: React.FC<HeroProps> = ({ onExploreMenu, onReserveTable }) => 
     <section id="home" className="relative min-h-[95vh] md:min-h-screen flex items-center justify-center overflow-hidden pt-20 pb-16">
       {/* Background Image with Slow Zoom & Contrast Scrim */}
       <div className="absolute inset-0 z-0">
+        <AdminImageUploadBadge
+          folder="hero"
+          label="Change Hero Image"
+          title="Admin: Upload & replace hero background photo"
+          className="top-24 left-6"
+          onUploaded={async (newUrl) => {
+            await handleUpdateSettings({ heroImage: newUrl, heroImageUrl: newUrl });
+          }}
+        />
         <img
           src={slide.image}
           alt="Broso Luxury Dining Interior"
