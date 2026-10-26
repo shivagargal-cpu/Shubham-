@@ -206,22 +206,32 @@ export const supabaseService = {
 
   async updateMenuItem(id: string, updates: Partial<MenuItem>): Promise<MenuItem | null> {
     const updated = storage.updateMenuItem(id, updates);
+    if (!updated) return null;
 
     if (isSupabaseLive() && supabase) {
       try {
-        const payload: any = { updated_at: new Date().toISOString() };
-        if (updates.name !== undefined) payload.name = updates.name;
-        if (updates.category !== undefined) payload.category = updates.category;
-        if (updates.description !== undefined) payload.description = updates.description;
-        if (updates.price !== undefined) payload.price = updates.price;
-        if (updates.imageUrl !== undefined) payload.image_url = updates.imageUrl;
-        if (updates.isVegetarian !== undefined) payload.is_vegetarian = updates.isVegetarian;
-        if (updates.isBestseller !== undefined) payload.is_bestseller = updates.isBestseller;
-        if (updates.isChefSpecial !== undefined) payload.is_chef_special = updates.isChefSpecial;
-        if (updates.available !== undefined) payload.available = updates.available;
-        if (updates.pairing !== undefined) payload.pairing = updates.pairing;
+        const payload: any = {
+          id: updated.id,
+          name: updated.name,
+          category: updated.category,
+          description: updated.description || '',
+          price: updated.price,
+          image_url: updated.imageUrl,
+          is_vegetarian: Boolean(updated.isVegetarian),
+          is_bestseller: Boolean(updated.isBestseller),
+          is_chef_special: Boolean(updated.isChefSpecial),
+          available: updated.available !== false,
+          calories: updated.calories || null,
+          prep_time: updated.prepTime || null,
+          ingredients: updated.ingredients || [],
+          pairing: updated.pairing || null,
+          updated_at: new Date().toISOString()
+        };
 
-        await supabase.from('menu_items').update(payload).eq('id', id);
+        const { error } = await supabase.from('menu_items').upsert(payload, { onConflict: 'id' });
+        if (error) {
+          console.warn('Supabase menu item upsert warning:', error.message);
+        }
       } catch (err) {
         console.warn('Supabase menu item update fallback to local:', err);
       }
@@ -308,17 +318,23 @@ export const supabaseService = {
 
   async updateGalleryItem(id: string, updates: Partial<GalleryItem>): Promise<GalleryItem | null> {
     const updated = storage.updateGalleryItem(id, updates);
+    if (!updated) return null;
 
     if (isSupabaseLive() && supabase) {
       try {
-        const payload: any = {};
-        if (updates.title !== undefined) payload.title = updates.title;
-        if (updates.category !== undefined) payload.category = updates.category;
-        if (updates.imageUrl !== undefined) payload.image_url = updates.imageUrl;
-        if (updates.description !== undefined) payload.description = updates.description;
-        if (updates.displayOrder !== undefined) payload.display_order = updates.displayOrder;
+        const payload: any = {
+          id: updated.id,
+          title: updated.title,
+          category: updated.category,
+          image_url: updated.imageUrl,
+          description: updated.description || '',
+          display_order: updated.displayOrder || 0,
+        };
 
-        await supabase.from('gallery_images').update(payload).eq('id', id);
+        const { error } = await supabase.from('gallery_images').upsert(payload, { onConflict: 'id' });
+        if (error) {
+          console.warn('Supabase gallery item upsert warning:', error.message);
+        }
       } catch (err) {
         console.warn('Supabase gallery update fallback to local:', err);
       }
@@ -606,7 +622,7 @@ export const supabaseService = {
 
     try {
       // 1. Seed Settings
-      await supabase.from('restaurant_settings').upsert({
+      const { error: sErr } = await supabase.from('restaurant_settings').upsert({
         id: 'settings_default',
         restaurant_name: DEFAULT_RESTAURANT_SETTINGS.restaurantName,
         tagline: DEFAULT_RESTAURANT_SETTINGS.tagline,
@@ -632,6 +648,9 @@ export const supabaseService = {
         social_facebook: DEFAULT_RESTAURANT_SETTINGS.socialFacebook,
         social_tripadvisor: DEFAULT_RESTAURANT_SETTINGS.socialTripadvisor,
       });
+      if (sErr) {
+        throw new Error(`restaurant_settings: ${sErr.message} (Code ${sErr.code || 'RLS'})`);
+      }
 
       // 2. Seed Menu Items
       const menuPayload = INITIAL_MENU_ITEMS.map((item) => ({
@@ -650,7 +669,10 @@ export const supabaseService = {
         ingredients: item.ingredients || [],
         pairing: item.pairing || null,
       }));
-      await supabase.from('menu_items').upsert(menuPayload, { onConflict: 'id' });
+      const { error: mErr } = await supabase.from('menu_items').upsert(menuPayload, { onConflict: 'id' });
+      if (mErr) {
+        throw new Error(`menu_items: ${mErr.message} (Code ${mErr.code || 'RLS'})`);
+      }
 
       // 3. Seed Gallery
       const galleryPayload = INITIAL_GALLERY.map((g, idx) => ({
@@ -661,7 +683,10 @@ export const supabaseService = {
         description: g.description,
         display_order: idx + 1,
       }));
-      await supabase.from('gallery_images').upsert(galleryPayload, { onConflict: 'id' });
+      const { error: gErr } = await supabase.from('gallery_images').upsert(galleryPayload, { onConflict: 'id' });
+      if (gErr) {
+        throw new Error(`gallery_images: ${gErr.message} (Code ${gErr.code || 'RLS'})`);
+      }
 
       // 4. Seed Reviews
       const reviewsPayload = INITIAL_REVIEWS.map((r) => ({
@@ -677,7 +702,10 @@ export const supabaseService = {
         status: r.status,
         is_featured: r.isFeatured || false,
       }));
-      await supabase.from('reviews').upsert(reviewsPayload, { onConflict: 'id' });
+      const { error: rErr } = await supabase.from('reviews').upsert(reviewsPayload, { onConflict: 'id' });
+      if (rErr) {
+        throw new Error(`reviews: ${rErr.message} (Code ${rErr.code || 'RLS'})`);
+      }
 
       return {
         success: true,
@@ -686,7 +714,7 @@ export const supabaseService = {
     } catch (err: any) {
       return {
         success: false,
-        message: `Seeding error: ${err.message || 'Check if tables exist in Supabase.'}`,
+        message: `Seeding error: ${err.message || 'Check if tables and RLS policies are applied in Supabase.'}`,
       };
     }
   },

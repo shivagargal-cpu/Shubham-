@@ -2120,40 +2120,12 @@ export const AdminPage: React.FC = () => {
 // SQL Preview Constant for the in-app modal
 const SQL_SCHEMA_PREVIEW = `-- ==============================================================================
 -- BROSO LUXURY RESTAURANT - COMPLETE SUPABASE SCHEMA & RLS MIGRATION
+-- Execute this script in: Supabase Dashboard > SQL Editor > New Query > Run
 -- ==============================================================================
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Profiles & User Roles
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
-  full_name TEXT,
-  email TEXT UNIQUE,
-  phone TEXT,
-  avatar_url TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS public.user_roles (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('admin', 'customer')),
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(user_id, role)
-);
-
-CREATE OR REPLACE FUNCTION public.is_admin(check_user_id UUID DEFAULT auth.uid())
-RETURNS BOOLEAN AS $$
-BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM public.user_roles
-    WHERE user_id = check_user_id AND role = 'admin'
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Restaurant Settings
+-- 1. RESTAURANT SETTINGS & HOMEPAGE CONTENT
 CREATE TABLE IF NOT EXISTS public.restaurant_settings (
   id TEXT PRIMARY KEY DEFAULT 'settings_default',
   restaurant_name TEXT NOT NULL DEFAULT 'BROSO',
@@ -2184,13 +2156,7 @@ CREATE TABLE IF NOT EXISTS public.restaurant_settings (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Menu Categories & Items
-CREATE TABLE IF NOT EXISTS public.menu_categories (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE,
-  display_order INT DEFAULT 0
-);
-
+-- 2. MENU ITEMS
 CREATE TABLE IF NOT EXISTS public.menu_items (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -2202,11 +2168,15 @@ CREATE TABLE IF NOT EXISTS public.menu_items (
   is_chef_special BOOLEAN DEFAULT FALSE,
   is_bestseller BOOLEAN DEFAULT FALSE,
   available BOOLEAN DEFAULT TRUE,
+  calories TEXT,
+  prep_time TEXT,
+  ingredients TEXT[],
+  pairing TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Gallery
+-- 3. GALLERY IMAGES
 CREATE TABLE IF NOT EXISTS public.gallery_images (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
@@ -2217,7 +2187,7 @@ CREATE TABLE IF NOT EXISTS public.gallery_images (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Orders & Order Items
+-- 4. ORDERS & ORDER ITEMS
 CREATE TABLE IF NOT EXISTS public.orders (
   id TEXT PRIMARY KEY,
   user_id TEXT,
@@ -2247,7 +2217,7 @@ CREATE TABLE IF NOT EXISTS public.order_items (
   instructions TEXT
 );
 
--- Reservations
+-- 5. TABLE RESERVATIONS
 CREATE TABLE IF NOT EXISTS public.reservations (
   id TEXT PRIMARY KEY,
   code TEXT NOT NULL UNIQUE,
@@ -2261,35 +2231,156 @@ CREATE TABLE IF NOT EXISTS public.reservations (
   seating_area TEXT NOT NULL,
   special_requests TEXT,
   occasion TEXT,
-  status TEXT NOT NULL DEFAULT 'pending',
+  status TEXT NOT NULL DEFAULT 'confirmed',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Reviews
+-- 6. PATRON REVIEWS
 CREATE TABLE IF NOT EXISTS public.reviews (
   id TEXT PRIMARY KEY,
   user_id TEXT,
   user_name TEXT NOT NULL,
+  user_role TEXT,
   rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
   title TEXT NOT NULL,
   comment TEXT NOT NULL,
   dish_recommended TEXT,
   visit_date DATE NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
+  is_verified_visit BOOLEAN DEFAULT TRUE,
+  status TEXT NOT NULL DEFAULT 'approved',
   is_featured BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Realtime Publications
-ALTER PUBLICATION supabase_realtime ADD TABLE public.menu_items;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.restaurant_settings;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.gallery_images;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.reservations;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.reviews;
+-- ==============================================================================
+-- ROW LEVEL SECURITY (RLS) POLICIES - PERMITS PUBLIC VIEWING AND APP WRITES
+-- ==============================================================================
 
--- Storage Bucket setup for restaurant-assets
+-- Enable RLS
+ALTER TABLE public.restaurant_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.menu_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.gallery_images ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.reservations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
+
+-- Restaurant Settings: Public Read + Full App Write
+DROP POLICY IF EXISTS "Public select restaurant_settings" ON public.restaurant_settings;
+CREATE POLICY "Public select restaurant_settings" ON public.restaurant_settings
+  FOR SELECT TO public USING (true);
+
+DROP POLICY IF EXISTS "Allow write restaurant_settings" ON public.restaurant_settings;
+CREATE POLICY "Allow write restaurant_settings" ON public.restaurant_settings
+  FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- Menu Items: Public Read + Full App Write
+DROP POLICY IF EXISTS "Public select menu_items" ON public.menu_items;
+CREATE POLICY "Public select menu_items" ON public.menu_items
+  FOR SELECT TO public USING (true);
+
+DROP POLICY IF EXISTS "Allow write menu_items" ON public.menu_items;
+CREATE POLICY "Allow write menu_items" ON public.menu_items
+  FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- Gallery Images: Public Read + Full App Write
+DROP POLICY IF EXISTS "Public select gallery_images" ON public.gallery_images;
+CREATE POLICY "Public select gallery_images" ON public.gallery_images
+  FOR SELECT TO public USING (true);
+
+DROP POLICY IF EXISTS "Allow write gallery_images" ON public.gallery_images;
+CREATE POLICY "Allow write gallery_images" ON public.gallery_images
+  FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- Orders: Public Read + Full App Write
+DROP POLICY IF EXISTS "Public select orders" ON public.orders;
+CREATE POLICY "Public select orders" ON public.orders
+  FOR SELECT TO public USING (true);
+
+DROP POLICY IF EXISTS "Allow write orders" ON public.orders;
+CREATE POLICY "Allow write orders" ON public.orders
+  FOR ALL TO public USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public select order_items" ON public.order_items;
+CREATE POLICY "Public select order_items" ON public.order_items
+  FOR SELECT TO public USING (true);
+
+DROP POLICY IF EXISTS "Allow write order_items" ON public.order_items;
+CREATE POLICY "Allow write order_items" ON public.order_items
+  FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- Reservations: Public Read + Full App Write
+DROP POLICY IF EXISTS "Public select reservations" ON public.reservations;
+CREATE POLICY "Public select reservations" ON public.reservations
+  FOR SELECT TO public USING (true);
+
+DROP POLICY IF EXISTS "Allow write reservations" ON public.reservations;
+CREATE POLICY "Allow write reservations" ON public.reservations
+  FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- Reviews: Public Read + Full App Write
+DROP POLICY IF EXISTS "Public select reviews" ON public.reviews;
+CREATE POLICY "Public select reviews" ON public.reviews
+  FOR SELECT TO public USING (true);
+
+DROP POLICY IF EXISTS "Allow write reviews" ON public.reviews;
+CREATE POLICY "Allow write reviews" ON public.reviews
+  FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- ==============================================================================
+-- STORAGE BUCKET & STORAGE RLS POLICIES FOR 'restaurant-assets'
+-- ==============================================================================
+
+-- 1. Ensure public bucket exists
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('restaurant-assets', 'restaurant-assets', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
+
+-- 2. Storage Policies on storage.objects
+DROP POLICY IF EXISTS "Public Access restaurant-assets" ON storage.objects;
+CREATE POLICY "Public Access restaurant-assets" ON storage.objects
+  FOR SELECT TO public USING (bucket_id = 'restaurant-assets');
+
+DROP POLICY IF EXISTS "Allow Upload restaurant-assets" ON storage.objects;
+CREATE POLICY "Allow Upload restaurant-assets" ON storage.objects
+  FOR INSERT TO public WITH CHECK (bucket_id = 'restaurant-assets');
+
+DROP POLICY IF EXISTS "Allow Update restaurant-assets" ON storage.objects;
+CREATE POLICY "Allow Update restaurant-assets" ON storage.objects
+  FOR UPDATE TO public USING (bucket_id = 'restaurant-assets') WITH CHECK (bucket_id = 'restaurant-assets');
+
+DROP POLICY IF EXISTS "Allow Delete restaurant-assets" ON storage.objects;
+CREATE POLICY "Allow Delete restaurant-assets" ON storage.objects
+  FOR DELETE TO public USING (bucket_id = 'restaurant-assets');
+
+-- ==============================================================================
+-- REALTIME SUBSCRIPTIONS
+-- ==============================================================================
+DO $$
+BEGIN
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.menu_items;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.restaurant_settings;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.gallery_images;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.reservations;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.reviews;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 `;
+

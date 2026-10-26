@@ -577,7 +577,7 @@
     }
   ],
   "supabaseConfig": {
-    "url": "https://yypdmkfgpwcitmrmzazg.supabase.com",
+    "url": "https://yypdmkfgpwcitmrmzazg.supabase.co",
     "anonKey": "sb_publishable_3VyCZgHgntHKWtlWokutyQ_PjazH7Gm"
   }
 }

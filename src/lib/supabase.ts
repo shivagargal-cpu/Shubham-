@@ -8,7 +8,10 @@ export const getSupabaseConfig = () => {
   const localUrl = typeof window !== 'undefined' ? localStorage.getItem('broso_supabase_url') : null;
   const localAnonKey = typeof window !== 'undefined' ? localStorage.getItem('broso_supabase_anon_key') : null;
 
-  const url = (localUrl && localUrl.trim()) || (envUrl && envUrl.trim()) || '';
+  let url = (localUrl && localUrl.trim()) || (envUrl && envUrl.trim()) || '';
+  if (url.includes('.supabase.com')) {
+    url = url.replace('.supabase.com', '.supabase.co');
+  }
   const anonKey = (localAnonKey && localAnonKey.trim()) || (envAnonKey && envAnonKey.trim()) || '';
 
   const isConfigured = Boolean(url && anonKey && url.startsWith('http') && !url.includes('placeholder'));
@@ -16,28 +19,73 @@ export const getSupabaseConfig = () => {
   return { url, anonKey, isConfigured };
 };
 
-const config = getSupabaseConfig();
+let _clientInstance: SupabaseClient | null = null;
+let _cachedUrl = '';
+let _cachedKey = '';
 
-// Singleton Supabase client instance
-export const supabase: SupabaseClient | null = config.isConfigured
-  ? createClient(config.url, config.anonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
+/**
+ * Returns active live SupabaseClient instance
+ */
+export const getSupabase = (): SupabaseClient | null => {
+  const cfg = getSupabaseConfig();
+  if (!cfg.isConfigured) return null;
+
+  if (_clientInstance && _cachedUrl === cfg.url && _cachedKey === cfg.anonKey) {
+    return _clientInstance;
+  }
+
+  _cachedUrl = cfg.url;
+  _cachedKey = cfg.anonKey;
+  _clientInstance = createClient(cfg.url, cfg.anonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+    realtime: {
+      params: {
+        eventsPerSecond: 10,
       },
-      realtime: {
-        params: {
-          eventsPerSecond: 10,
-        },
-      },
-    })
-  : null;
+    },
+  });
+
+  return _clientInstance;
+};
+
+// Singleton Supabase client instance (proxied dynamically to live config)
+export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
+  get(_target, prop) {
+    const liveClient = getSupabase();
+    if (!liveClient) {
+      if (prop === 'auth') {
+        return {
+          signOut: async () => ({ error: null }),
+          getSession: async () => ({ data: { session: null }, error: null }),
+        };
+      }
+      return () => ({
+        select: () => Promise.resolve({ data: null, error: new Error('Supabase not configured') }),
+        from: () => ({
+          select: () => Promise.resolve({ data: null, error: new Error('Supabase not configured') }),
+          insert: () => Promise.resolve({ data: null, error: new Error('Supabase not configured') }),
+          update: () => Promise.resolve({ data: null, error: new Error('Supabase not configured') }),
+          delete: () => Promise.resolve({ data: null, error: new Error('Supabase not configured') }),
+          upsert: () => Promise.resolve({ data: null, error: new Error('Supabase not configured') }),
+        }),
+      });
+    }
+    const val = (liveClient as any)[prop];
+    if (typeof val === 'function') {
+      return val.bind(liveClient);
+    }
+    return val;
+  },
+});
 
 /**
  * Check if active live connection to Supabase is enabled
  */
 export const isSupabaseLive = (): boolean => {
-  return Boolean(supabase && getSupabaseConfig().isConfigured);
+  return Boolean(getSupabaseConfig().isConfigured);
 };
 
 export const STORAGE_BUCKET = 'restaurant-assets';
@@ -154,7 +202,7 @@ export const uploadImageToStorage = async (
     console.warn('Server upload fallback:', err);
   }
 
-  // 2. If Supabase Storage is active, also upload to Supabase bucket
+  // 2. If Supabase Storage is active, upload to Supabase bucket
   if (isSupabaseLive() && supabase) {
     try {
       const { data, error } = await supabase.storage
@@ -162,6 +210,7 @@ export const uploadImageToStorage = async (
         .upload(filePath, uploadBlob, {
           cacheControl: '3600',
           upsert: true,
+          contentType: uploadBlob.type || file.type || 'image/jpeg',
         });
 
       if (!error && data) {
@@ -169,12 +218,23 @@ export const uploadImageToStorage = async (
           .from(STORAGE_BUCKET)
           .getPublicUrl(data.path);
 
+        const permanentUrl = `${publicUrlData.publicUrl}?t=${Date.now()}`;
         return {
-          url: publicUrlData.publicUrl,
+          url: permanentUrl,
           path: data.path,
         };
+      } else if (error) {
+        console.warn('Supabase storage upload error:', error.message);
+        const isRlsError = error.message?.toLowerCase().includes('policy') || error.message?.toLowerCase().includes('security');
+        if (isRlsError) {
+          return {
+            url: serverUrl || base64Data,
+            path: filePath,
+            error: 'Supabase Storage RLS policy blocked upload. Please run the SQL migration in Supabase SQL Editor.',
+          };
+        }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Supabase storage upload error, utilizing server URL:', err);
     }
   }

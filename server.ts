@@ -72,7 +72,7 @@ if (fs.existsSync(storeFilePath)) {
       ...parsed,
       settings: { ...DEFAULT_RESTAURANT_SETTINGS, ...(parsed.settings || {}) },
       supabaseConfig: {
-        url: process.env.VITE_SUPABASE_URL || parsed.supabaseConfig?.url || '',
+        url: (process.env.VITE_SUPABASE_URL || parsed.supabaseConfig?.url || '').replace('.supabase.com', '.supabase.co'),
         anonKey: process.env.VITE_SUPABASE_ANON_KEY || parsed.supabaseConfig?.anonKey || '',
       },
     };
@@ -121,7 +121,7 @@ app.get('/api/supabase-config', (_req, res) => {
 app.post('/api/supabase-config', (req, res) => {
   const { url, anonKey } = req.body;
   store.supabaseConfig = {
-    url: (url || '').trim(),
+    url: (url || '').trim().replace('.supabase.com', '.supabase.co'),
     anonKey: (anonKey || '').trim(),
   };
   saveStore();
